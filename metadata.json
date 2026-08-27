@@ -1,0 +1,6 @@
+{
+  "name": "Smart Energy Predictor",
+  "description": "Smart Energy Consumption and Electricity Bill Prediction with ML Regression models, AP telescopic tariff calculation, and live forecasting.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
