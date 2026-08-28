@@ -25,6 +25,19 @@ export interface ModelEvaluationData {
 
 export type ConsumptionStatus = 'Low' | 'Normal' | 'High' | 'Very High';
 
+export interface BillBreakdownComponents {
+  energyCharge: number;
+  fixedCharge: number;
+  customerCharge: number;
+  electricityDuty: number;
+  fppca2Charge: number;
+  otherCharges: number;
+  grossBill: number;
+  governmentSubsidy: number;
+  otherAdjustment: number;
+  netBill: number;
+}
+
 export interface PredictionResult {
   // Current Period
   unitsConsumed: number;
@@ -38,6 +51,10 @@ export interface PredictionResult {
   fromYear: number;
   projectedMonthlyUnits: number;
   projectedMonthlyEnergyCharge: number;
+
+  // Detailed Rule-Based Bill Breakdown
+  currentPeriodBreakdown: BillBreakdownComponents;
+  projectedMonthlyBreakdown: BillBreakdownComponents;
 
   // AI Prediction
   predictedMonthlyBill: number; // Gross monthly bill

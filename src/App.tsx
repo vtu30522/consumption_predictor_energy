@@ -34,6 +34,7 @@ import { ModelAnalysis } from './components/ModelAnalysis';
 import { PredictionValidation } from './components/PredictionValidation';
 import { EnergyConsumptionForecast } from './components/EnergyConsumptionForecast';
 import { DailyEnergyTracking } from './components/DailyEnergyTracking';
+import { DetailedBillBreakdown } from './components/DetailedBillBreakdown';
 
 export default function App() {
   const [activeTab, setActiveTab] = useState<'prediction' | 'daily-tracking' | 'model-analysis'>('prediction');
@@ -816,6 +817,16 @@ export default function App() {
               <Zap className="w-72 h-72" />
             </div>
           </div>
+
+          {/* DETAILED BILL BREAKDOWN Section (Separate Components) */}
+          {result && (
+            <DetailedBillBreakdown
+              breakdown={result.currentPeriodBreakdown}
+              units={result.unitsConsumed}
+              label="Detailed Bill Breakdown (Current Period)"
+              subLabel="Itemized billing breakdown showing Energy Charge, Fixed Charge, Customer Charge, Duty, FPPCA-2, and Subsidy"
+            />
+          )}
 
           {/* ENERGY CONSUMPTION FORECAST Section */}
           {result && <EnergyConsumptionForecast result={result} />}

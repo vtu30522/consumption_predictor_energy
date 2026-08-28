@@ -10,9 +10,10 @@ const PORT = 3000;
 app.use(express.json());
 
 const MODEL_PKL_PATH = path.join(process.cwd(), "model.pkl");
+const MODEL_TREES_PATH = path.join(process.cwd(), "model_trees.json");
 const PREDICT_RUNNER_PATH = path.join(process.cwd(), "predict_runner.py");
 
-// Function to execute the trained model.pkl using Python runner
+// Function to execute the trained model.pkl using Python runner with in-memory decision tree fallback
 function getMLModelPrediction(features: {
   billing_days: number;
   avg_units: number;
@@ -21,34 +22,85 @@ function getMLModelPrediction(features: {
   projected_monthly_units: number;
   is_subsidy: number;
 }): { predicted_monthly_net_bill: number; model_name: string; features_used: string[] } {
-  if (!fs.existsSync(MODEL_PKL_PATH)) {
-    throw new Error(`model.pkl is missing or cannot be loaded at ${MODEL_PKL_PATH}`);
+  const featureArray = [
+    features.billing_days,
+    features.avg_units,
+    features.month,
+    features.month_days,
+    features.projected_monthly_units,
+    features.is_subsidy,
+  ];
+
+  // 1. Try python3 predict_runner.py execution with model.pkl
+  if (fs.existsSync(MODEL_PKL_PATH) && fs.existsSync(PREDICT_RUNNER_PATH)) {
+    try {
+      const payload = JSON.stringify(features);
+      const stdout = execFileSync("python3", [PREDICT_RUNNER_PATH, payload], {
+        encoding: "utf-8",
+        maxBuffer: 10 * 1024 * 1024,
+        timeout: 8000,
+      });
+
+      const parsed = JSON.parse(stdout.trim());
+      if (parsed.status === "success" && typeof parsed.predicted_monthly_net_bill === "number") {
+        return {
+          predicted_monthly_net_bill: parsed.predicted_monthly_net_bill,
+          model_name: parsed.model_name || "Gradient Boosting Regressor",
+          features_used: parsed.features_used || [
+            "billing_days",
+            "avg_units",
+            "month",
+            "month_days",
+            "projected_monthly_units",
+            "is_subsidy",
+          ],
+        };
+      }
+    } catch (pyErr) {
+      console.warn("Python execution warning, evaluating tree model directly:", pyErr);
+    }
   }
 
-  const payload = JSON.stringify(features);
-  const stdout = execFileSync("python3", [PREDICT_RUNNER_PATH, payload], {
-    encoding: "utf-8",
-    maxBuffer: 10 * 1024 * 1024,
-    timeout: 10000,
-  });
-
-  const parsed = JSON.parse(stdout.trim());
-  if (parsed.status !== "success" || typeof parsed.predicted_monthly_net_bill !== "number") {
-    throw new Error(parsed.error || "Model execution failed to return a valid prediction");
+  // 2. Direct tree traversal fallback (exact same trained Gradient Boosting trees from model.pkl)
+  if (fs.existsSync(MODEL_TREES_PATH)) {
+    try {
+      const modelData = JSON.parse(fs.readFileSync(MODEL_TREES_PATH, "utf-8"));
+      const gb = modelData.gradient_boosting;
+      if (gb && gb.trees && typeof gb.base_pred === "number") {
+        let pred = Number(gb.base_pred);
+        const lr = Number(gb.learning_rate || 0.1);
+        for (const tree of gb.trees) {
+          let curr = tree;
+          while (!curr.leaf) {
+            const f_idx = curr.feature;
+            const thresh = curr.threshold;
+            if (featureArray[f_idx] <= thresh) {
+              curr = curr.left;
+            } else {
+              curr = curr.right;
+            }
+          }
+          pred += lr * Number(curr.value);
+        }
+        return {
+          predicted_monthly_net_bill: Math.max(0, Math.round(pred * 100) / 100),
+          model_name: modelData.best_model_name || "Gradient Boosting Regressor",
+          features_used: modelData.feature_names || [
+            "billing_days",
+            "avg_units",
+            "month",
+            "month_days",
+            "projected_monthly_units",
+            "is_subsidy",
+          ],
+        };
+      }
+    } catch (treeErr) {
+      console.error("Direct tree traversal error:", treeErr);
+    }
   }
 
-  return {
-    predicted_monthly_net_bill: parsed.predicted_monthly_net_bill,
-    model_name: parsed.model_name || "Trained ML Model",
-    features_used: parsed.features_used || [
-      "billing_days",
-      "avg_units",
-      "month",
-      "month_days",
-      "projected_monthly_units",
-      "is_subsidy",
-    ],
-  };
+  throw new Error("Trained Gradient Boosting model could not be executed");
 }
 
 // AP Telescopic Tariff Calculation
